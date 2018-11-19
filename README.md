@@ -42,6 +42,7 @@ The script creates the following:
 | URL                     | The URL of the deployed REST API                               |
 | Queue                   | The URL of the message queue for onwards processing            |
 | ErrorQueue              | The URL of the redrive queue for failed messages               |
+| BucketName              | The name of the S3 bucket in which data is stored              |
 
 
 ## Notes

@@ -244,7 +244,7 @@
                 "LifecycleConfiguration" : {
                     "Rules" : [
                         {
-                            "ExpirationInDays" : 1,
+                            "ExpirationInDays" : 14,
                             "Prefix" : "/Data/",
                             "Status" : "Enabled"
                         }
@@ -501,6 +501,10 @@
         "ErrorQueue" : {
             "Description" : "The URL to the message error queue",
             "Value" : { "Ref" : "RedriveQueue" }
+        },
+        "BucketName" : {
+            "Description" : "The bucket in which the data is stored",
+            "Value" : { "Ref" : "Bucket" }
         }
     }
 }
