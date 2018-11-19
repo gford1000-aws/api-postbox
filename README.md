@@ -18,6 +18,9 @@ cloudformation script can capture the data regionally, with further processes th
 processing the data asynchronously.  This allows centralised processing in a single region, with minimal impact
 to the callers of the API should that region ever go offline. 
 
+The Lambda function runs within a separate VPC, using a VPC Endpoint to save data to S3, and a NAT Gateway to
+queue the message on SQS (no VPC Endpoint is currently available for SQS).
+
 The script creates the following:
 
 ![alt text](https://github.com/gford1000-aws/api-postbox/blob/master/Data%20Postbox.png "Script per designer")
@@ -33,6 +36,7 @@ The script creates the following:
 | AuthorisationTimeout         | TTL of cache for authorisations (set to 0 for no caching)                   |
 | LoggingTTL                   | TTL for logs of each Lambda function, saved to specific log groups          |
 | MaxProcessingAttempts        | Number of message processing attempts prior to moving to redrive            |
+| S3EndpointPrefixList         | S3 VPC Endpoint prefix list for the region being deployed into              |   
 
 
 ## Outputs
@@ -53,6 +57,8 @@ The script creates the following:
 * The SQS message queue will retain messages for 14 days, to maximise resilience if downstream experiences outages
 * Data in the S3 bucket is encrypted at rest using server-side encryption 
 * Data in the S3 bucket expires after 14 days, to be consistent with SQS message retention
+* The Lambda function runs within 2 private subnets
+* Only a single NAT Gateway is deployed - for full resiliency 2 should be used, with separate routing tables for each private subnet based on AZ
 
 
 ## Licence

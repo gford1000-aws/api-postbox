@@ -41,6 +41,10 @@
             "Type" : "Number",
             "MinValue" : 1,
             "MaxValue" : 100
+        },
+        "S3EndpointPrefixList" : {
+            "Description" : "The prefix list 'pl-xxxxxxx' value for S3 in the deployment region.  Use 'aws ec2 describe-prefix-lists'",
+            "Type" : "String"
         }
 	},
 	"Resources" : {
@@ -245,7 +249,7 @@
                     "Rules" : [
                         {
                             "ExpirationInDays" : 14,
-                            "Prefix" : "/Data/",
+                            "Prefix" : "Data/",
                             "Status" : "Enabled"
                         }
                     ]
@@ -341,7 +345,7 @@
                         ]
                     }
                 },
-                "Description" : "Lambda returning the current date/time",
+                "Description" : "Lambda saves data to S3 and queues reference on SQS",
                 "Environment" : {
                     "Variables" : {
                         "BucketName" : { "Ref": "Bucket" },
@@ -356,6 +360,22 @@
                 "Timeout" : 5,
                 "TracingConfig" : {
                     "Mode" : "Active"
+                },
+                "VpcConfig" : {
+                    "SecurityGroupIds" : [ { "Ref" : "SaveDataLambdaSecurityGroup" }],
+                    "SubnetIds" : { 
+                        "Fn::Split" : [ ",", 
+                            {
+                                "Fn::Sub" : [ 
+                                    "${Subnet1},${Subnet2}", 
+                                    {
+                                        "Subnet1" : { "Ref" : "PrivateSubnet1" },
+                                        "Subnet2" : { "Ref" : "PrivateSubnet2" }
+                                    } 
+                                ]
+                            }
+                        ] 
+                    }
                 }
             }
         },
@@ -423,6 +443,25 @@
                         }
                     },
                     {
+                        "PolicyName": "VPCAccess",
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                  "Effect":"Allow",
+                                  "Action":[ 
+                                    "ec2:CreateNetworkInterface",
+                                    "ec2:DescribeNetworkInterfaces",
+                                    "ec2:DeleteNetworkInterface"
+                                  ],
+                                  "Resource": [ 
+                                    "*"
+                                  ]
+                                }
+                            ]
+                        }
+                    },
+                    {
                         "PolicyName": "SQSPublication",
                         "PolicyDocument": {
                             "Version": "2012-10-17",
@@ -476,7 +515,160 @@
                     ]
                 }
             }
-        }    
+        },    
+        "VPC": {
+            "Type": "AWS::EC2::VPC",
+            "Properties": {
+                "CidrBlock": "10.0.0.0/16",
+                "EnableDnsHostnames": true,
+                "EnableDnsSupport": true,
+                "InstanceTenancy": "default"
+            }
+        },
+        "InternetGateway" : {
+            "Type": "AWS::EC2::InternetGateway"
+        },
+        "AttachInternetGatewayToVPC" : {
+            "Type": "AWS::EC2::VPCGatewayAttachment",
+            "Properties": {
+                "VpcId" : { "Ref" : "VPC" },
+                "InternetGatewayId" : { "Ref" : "InternetGateway" }
+            }
+        },
+        "PublicSubnet1": {
+            "Type": "AWS::EC2::Subnet",
+            "Properties": {
+                "AvailabilityZone": { "Fn::Select" : [ "0", { "Fn::GetAZs" : "" } ] },
+                "CidrBlock": "10.0.64.0/24",
+                "VpcId": {
+                    "Ref": "VPC"
+                }
+            }
+        },
+        "PublicSubnetRouteTable": {
+            "Type": "AWS::EC2::RouteTable",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "VPC"
+                }
+            }
+        },
+        "PublicSubnet1RouteTableAssociation": {
+            "Type": "AWS::EC2::SubnetRouteTableAssociation",
+            "Properties": {
+                "RouteTableId": { "Ref": "PublicSubnetRouteTable" },
+                "SubnetId": { "Ref": "PublicSubnet1" }
+            }
+        },
+        "PublicSubnetRouteToInternet" : {
+            "Type": "AWS::EC2::Route",
+            "Properties" : {
+                "RouteTableId" : { "Ref" : "PublicSubnetRouteTable" },
+                "DestinationCidrBlock" : "0.0.0.0/0",
+                "GatewayId" : { "Ref" : "InternetGateway" }
+            }
+        },
+        "NATEIP" : {
+            "Type" : "AWS::EC2::EIP",
+            "Properties" : {
+                "Domain" : "vpc"
+            }
+        },
+        "NAT" : {
+            "Type" : "AWS::EC2::NatGateway",
+            "Properties" : {
+                "AllocationId" : { "Fn::GetAtt" : [ "NATEIP", "AllocationId" ] },
+                "SubnetId" : { "Ref": "PublicSubnet1" }
+            }
+        },
+        "PrivateSubnetRouteTable": {
+            "Type": "AWS::EC2::RouteTable",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "VPC"
+                }
+            }
+        },
+        "PrivateSubnetRouteToInternet" : {
+            "Type": "AWS::EC2::Route",
+            "Properties" : {
+                "RouteTableId" : { "Ref" : "PrivateSubnetRouteTable" },
+                "DestinationCidrBlock" : "0.0.0.0/0",
+                "NatGatewayId" : { "Ref" : "NAT" }
+            }
+        },
+        "PrivateSubnet1": {
+            "Type": "AWS::EC2::Subnet",
+            "Properties": {
+                "AvailabilityZone": { "Fn::Select" : [ "0", { "Fn::GetAZs" : "" } ] },
+                "CidrBlock": "10.0.0.0/20",
+                "VpcId": {
+                    "Ref": "VPC"
+                }
+            }
+        },
+        "PrivateSubnet1RouteTableAssociation": {
+            "Type": "AWS::EC2::SubnetRouteTableAssociation",
+            "Properties": {
+                "RouteTableId": { "Ref": "PrivateSubnetRouteTable" },
+                "SubnetId": { "Ref": "PrivateSubnet1" }
+            }
+        },
+        "PrivateSubnet2": {
+            "Type": "AWS::EC2::Subnet",
+            "Properties": {
+                "AvailabilityZone": { "Fn::Select" : [ "0", { "Fn::GetAZs" : "" } ] },
+                "CidrBlock": "10.0.33.0/20",
+                "VpcId": {
+                    "Ref": "VPC"
+                }
+            }
+        },
+        "PrivateSubnet2RouteTableAssociation": {
+            "Type": "AWS::EC2::SubnetRouteTableAssociation",
+            "Properties": {
+                "RouteTableId": { "Ref": "PrivateSubnetRouteTable" },
+                "SubnetId": { "Ref": "PrivateSubnet2" }
+            }
+        },
+        "S3Endpoint" : {
+            "Type" : "AWS::EC2::VPCEndpoint",
+            "Properties" : {
+                "PolicyDocument" : {
+                    "Version":"2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect" : "Allow",
+                            "Principal" : "*",
+                            "Action" : [ "s3:PutObject" ],
+                            "Resource": [ { "Fn::Sub": [ "${Arn}/*", { "Arn": { "Fn::GetAtt" : [ "Bucket", "Arn" ] } } ] } ] 
+                        }
+                    ]
+                },
+                "RouteTableIds" : [ { "Ref" : "PrivateSubnetRouteTable" } ],
+                "ServiceName" : { "Fn::Sub" : [ "com.amazonaws.${Region}.s3", { "Region" : { "Ref" : "AWS::Region" } } ] },
+                "VpcId" : { "Ref" : "VPC" }
+            }
+        },
+        "SaveDataLambdaSecurityGroup" : {
+            "Type" : "AWS::EC2::SecurityGroup",
+            "Properties" : {
+                "GroupDescription" : "Security Group for SaveDataLambda Egress",
+                "VpcId" : { "Ref" : "VPC" },
+                "SecurityGroupEgress" : [
+                    {
+                        "DestinationPrefixListId" : { "Ref" : "S3EndpointPrefixList" },
+                        "IpProtocol" : "-1" 
+                    },
+                    {
+                        "IpProtocol" : "tcp",
+                        "FromPort" : 443,
+                        "ToPort" : 443,
+                        "CidrIp" : "0.0.0.0/0"
+                    }
+                ]
+            }
+        }
     },
     "Outputs" : {
         "URL" : {
