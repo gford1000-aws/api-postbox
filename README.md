@@ -1,4 +1,4 @@
-# api-to-sqs
+# api-postbox
 
 AWS CloudFormation script that creates an internet facing API using AWS API Gateway and AWS Lambda, that allows 
 data of up to 10MB (API Gateway's limit) to be queued for async onwards processing.
@@ -20,7 +20,7 @@ to the callers of the API should that region ever go offline.
 
 The script creates the following:
 
-![alt text](https://github.com/gford1000-aws/api-gateway/blob/master/Data%20Postbox.png "Script per designer")
+![alt text](https://github.com/gford1000-aws/api-postbox/blob/master/Data%20Postbox.png "Script per designer")
 
 ## Arguments
 
